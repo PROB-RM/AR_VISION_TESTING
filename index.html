@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>GOPAL AR</title>
+
+  <!-- MindAR + Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #111;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      overflow: hidden;
+      height: 100dvh;
+      width: 100dvw;
+    }
+
+    #ar-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Overlay UI ── */
+    #ui-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Top bar */
+    #topbar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+    }
+
+    .logo {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: #fff;
+      text-transform: uppercase;
+    }
+
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #ff4444;
+      box-shadow: 0 0 8px #ff4444;
+      animation: pulse 1.5s infinite;
+      transition: background 0.4s, box-shadow 0.4s;
+    }
+    .status-dot.tracking {
+      background: #00ff88;
+      box-shadow: 0 0 12px #00ff88;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Scan hint */
+    #scan-hint {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      transition: opacity 0.5s;
+    }
+
+    #scan-hint .hint-text {
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .scan-frame {
+      width: 180px; height: 80px;
+      border: 1.5px solid rgba(255,255,255,0.3);
+      border-radius: 6px;
+      position: relative;
+    }
+
+    .scan-frame::before,
+    .scan-frame::after {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      border-color: #00ff88;
+      border-style: solid;
+    }
+    .scan-frame::before {
+      top: -2px; left: -2px;
+      border-width: 2px 0 0 2px;
+      border-radius: 4px 0 0 0;
+    }
+    .scan-frame::after {
+      bottom: -2px; right: -2px;
+      border-width: 0 2px 2px 0;
+      border-radius: 0 0 4px 0;
+    }
+
+    /* Scan line animation */
+    .scan-line {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(to right, transparent, #00ff88, transparent);
+      animation: scanline 2s ease-in-out infinite;
+    }
+
+    @keyframes scanline {
+      0% { top: 0; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { top: 100%; opacity: 0; }
+    }
+
+    /* Tracking badge */
+    #tracking-badge {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 255, 136, 0.15);
+      border: 1px solid #00ff88;
+      border-radius: 30px;
+      padding: 8px 22px;
+      font-size: 11px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #00ff88;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+
+    /* Controls hint */
+    #controls-hint {
+      position: absolute;
+      top: 80px;
+      right: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+
+    .ctrl-pill {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      text-align: center;
+    }
+
+    /* Corner decorations */
+    .corner {
+      position: absolute;
+      width: 40px; height: 40px;
+    }
+    .corner.tl { top: 0; left: 0; border-top: 1.5px solid rgba(255,255,255,0.2); border-left: 1.5px solid rgba(255,255,255,0.2); }
+    .corner.tr { top: 0; right: 0; border-top: 1.5px solid rgba(255,255,255,0.2); border-right: 1.5px solid rgba(255,255,255,0.2); }
+    .corner.bl { bottom: 0; left: 0; border-bottom: 1.5px solid rgba(255,255,255,0.2); border-left: 1.5px solid rgba(255,255,255,0.2); }
+    .corner.br { bottom: 0; right: 0; border-bottom: 1.5px solid rgba(255,255,255,0.2); border-right: 1.5px solid rgba(255,255,255,0.2); }
+  </style>
+</head>
+
+<body>
+
+  <div id="ar-container"></div>
+
+  <!-- HUD Overlay -->
+  <div id="ui-overlay">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <div id="topbar">
+      <div class="logo">GOPAL</div>
+      <div class="status-dot" id="status-dot"></div>
+    </div>
+
+    <div id="controls-hint">
+      <div class="ctrl-pill">📱 Move closer</div>
+      <div class="ctrl-pill">🔄 Tilt to orbit</div>
+    </div>
+
+    <div id="scan-hint">
+      <div class="scan-frame">
+        <div class="scan-line"></div>
+      </div>
+      <div class="hint-text">Point at GOPAL image</div>
+    </div>
+
+    <div id="tracking-badge">✦ Tracking active</div>
+  </div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+
+// ── Elements ──────────────────────────────────────────────
+const statusDot      = document.getElementById('status-dot');
+const scanHint       = document.getElementById('scan-hint');
+const trackingBadge  = document.getElementById('tracking-badge');
+const controlsHint   = document.getElementById('controls-hint');
+
+// ── MindAR Setup ──────────────────────────────────────────
+const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+  container: document.getElementById('ar-container'),
+  imageTargetSrc: './gopal-target.mind',  // ← your compiled target
+  maxTrack: 1,
+  uiLoading: 'yes',
+  uiScanning: 'no',
+  uiError: 'no',
+});
+
+const { renderer, scene, camera } = mindarThree;
+
+// ── Lighting ──────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+dirLight.position.set(2, 4, 3);
+scene.add(dirLight);
+
+const rimLight = new THREE.DirectionalLight(0x00ffaa, 0.8);
+rimLight.position.set(-3, 1, -2);
+scene.add(rimLight);
+
+// ── Anchor (tied to image target 0) ───────────────────────
+const anchor = mindarThree.addAnchor(0);
+
+// ── Load Robot Model ──────────────────────────────────────
+const loader = new GLTFLoader();
+let mixer = null;
+let robot = null;
+
+loader.load(
+  './robot_animation.glb',
+  (gltf) => {
+    robot = gltf.scene;
+
+    // Scale & position above the image target
+    robot.scale.set(0.08, 0.08, 0.08);
+    robot.position.set(0, 0.1, 0);
+
+    anchor.group.add(robot);
+
+    // Play all animations if present
+    if (gltf.animations && gltf.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(robot);
+      gltf.animations.forEach((clip) => {
+        const action = mixer.clipAction(clip);
+        action.play();
+      });
+    }
+
+    console.log('✅ Robot model loaded');
+  },
+  (progress) => {
+    console.log('Loading:', Math.round(progress.loaded / progress.total * 100) + '%');
+  },
+  (err) => {
+    console.error('❌ Model load error:', err);
+  }
+);
+
+// ── Tracking Events ───────────────────────────────────────
+anchor.onTargetFound = () => {
+  statusDot.classList.add('tracking');
+  scanHint.style.opacity = '0';
+  trackingBadge.style.opacity = '1';
+  controlsHint.style.opacity = '1';
+};
+
+anchor.onTargetLost = () => {
+  statusDot.classList.remove('tracking');
+  scanHint.style.opacity = '1';
+  trackingBadge.style.opacity = '0';
+  controlsHint.style.opacity = '0';
+};
+
+// ── Render Loop ───────────────────────────────────────────
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const delta = clock.getDelta();
+  if (mixer) mixer.update(delta);
+
+  // Gentle idle bobbing when tracked
+  if (robot && anchor.group.visible) {
+    robot.position.y = 0.1 + Math.sin(clock.elapsedTime * 1.5) * 0.015;
+    robot.rotation.y += 0.005;
+  }
+
+  renderer.render(scene, camera);
+});
+
+// ── Start AR ──────────────────────────────────────────────
+await mindarThree.start();
+</script>
+
+</body>
+</html>
